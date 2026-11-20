@@ -11,6 +11,8 @@ jobs:
       - uses: actions/checkout@v5
       - name: No code comments
         run: ./scripts/check-no-comments.sh
+      - name: Lint
+        run: swift format lint --strict -r Tape Packages
       - name: Core tests
         run: swift test --package-path Packages/TapeKit
       - name: Build app
