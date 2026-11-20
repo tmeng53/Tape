@@ -106,7 +106,7 @@ public final class ScreenCaptureRecorder: NSObject, ScreenRecording, SCRecording
 
     @MainActor
     private static func backingScale(for displayID: CGDirectDisplayID) -> Double {
-        NSScreen.screens.first { $0.displayID == displayID }?.backingScaleFactor ?? 2
+        Double(NSScreen.screens.first { $0.displayID == displayID }?.backingScaleFactor ?? 2)
     }
 }
 
