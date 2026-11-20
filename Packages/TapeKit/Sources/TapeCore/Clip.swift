@@ -56,19 +56,17 @@ public enum ClipNaming {
 
 public final class LocalClipStore: ClipStoring {
     public let root: URL
-    private let fileManager: FileManager
     private let makeID: @Sendable () -> UUID
 
-    public init(root: URL, fileManager: FileManager = .default, makeID: @escaping @Sendable () -> UUID = { UUID() }) {
+    public init(root: URL, makeID: @escaping @Sendable () -> UUID = { UUID() }) {
         self.root = root
-        self.fileManager = fileManager
         self.makeID = makeID
     }
 
     public func makeDraft(at date: Date) throws -> ClipDraft {
         let id = makeID()
         let folder = root.appendingPathComponent(id.uuidString, isDirectory: true)
-        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return ClipDraft(
             id: id,
             createdAt: date,
@@ -85,7 +83,7 @@ public final class LocalClipStore: ClipStoring {
     }
 
     public func discard(_ draft: ClipDraft) {
-        try? fileManager.removeItem(at: draft.folder)
+        try? FileManager.default.removeItem(at: draft.folder)
     }
 
     public func manifest(for id: UUID) throws -> ClipManifest {
