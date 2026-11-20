@@ -28,7 +28,8 @@ final class AppModel {
 
     init() {
         let saved = UserDefaults.standard.string(forKey: Self.talkKeyDefaultsKey).flatMap(ModifierKey.init(rawValue:))
-        talkKey = saved ?? .leftControl
+        let initialKey = saved ?? .leftControl
+        talkKey = initialKey
         clipsFolder = URL.applicationSupportDirectory.appending(path: "Tape/Clips", directoryHint: .isDirectory)
         session = RecordingSession(
             recorder: ScreenCaptureRecorder(),
@@ -36,7 +37,7 @@ final class AppModel {
             delivery: PasteboardDelivery(),
             store: LocalClipStore(root: clipsFolder)
         )
-        tap = TalkKeyTap(talkKey: talkKey)
+        tap = TalkKeyTap(talkKey: initialKey)
 
         session.onStatus = { [weak self] in self?.statusChanged($0) }
         tap.onAction = { [weak self] action in
