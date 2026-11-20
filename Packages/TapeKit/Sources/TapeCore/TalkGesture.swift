@@ -149,8 +149,8 @@ extension TalkGesture.Event {
     var time: Double {
         switch self {
         case let .talkDown(at, _), let .talkUp(at), let .otherKeyDown(at),
-             let .otherModifierChanged(at), let .mouseDown(at), let .mouseOther(at),
-             let .escape(at):
+            let .otherModifierChanged(at), let .mouseDown(at), let .mouseOther(at),
+            let .escape(at):
             at
         }
     }

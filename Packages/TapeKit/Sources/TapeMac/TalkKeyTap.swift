@@ -39,14 +39,16 @@ public final class TalkKeyTap {
             MainActor.assumeIsolated { result = tap.handle(proxy: proxy, type: type, event: event) }
             return result
         }
-        guard let port = CGEvent.tapCreate(
-            tap: .cghidEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: mask,
-            callback: callback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else { return false }
+        guard
+            let port = CGEvent.tapCreate(
+                tap: .cghidEventTap,
+                place: .headInsertEventTap,
+                options: .defaultTap,
+                eventsOfInterest: mask,
+                callback: callback,
+                userInfo: Unmanaged.passUnretained(self).toOpaque()
+            )
+        else { return false }
         tap = port
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, port, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
@@ -118,7 +120,7 @@ public final class TalkKeyTap {
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             return .mouseDown(at: now)
         case .keyUp, .leftMouseUp, .rightMouseUp, .otherMouseUp,
-             .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel:
+            .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel:
             return .mouseOther(at: now)
         default:
             return nil

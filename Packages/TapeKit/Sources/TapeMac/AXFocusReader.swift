@@ -14,11 +14,13 @@ public final class AXFocusReader: FocusReading {
 
     public func focusedTextTarget() -> FocusTarget? {
         guard let app = NSWorkspace.shared.frontmostApplication,
-              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }
+            app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        else { return nil }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
         prepare(app, element: appElement)
         guard let focused = Self.element(appElement, kAXFocusedUIElementAttribute),
-              let role = Self.isEditable(focused) else { return nil }
+            let role = Self.isEditable(focused)
+        else { return nil }
         return FocusTarget(
             processID: app.processIdentifier,
             bundleID: app.bundleIdentifier,
@@ -39,7 +41,8 @@ public final class AXFocusReader: FocusReading {
         if self.element(element, "AXEditableAncestor") != nil { return role.isEmpty ? "AXEditable" : role }
         var settable = DarwinBoolean(false)
         if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success,
-           settable.boolValue, role != kAXSliderRole, role != kAXCheckBoxRole {
+            settable.boolValue, role != kAXSliderRole, role != kAXCheckBoxRole
+        {
             return role.isEmpty ? "AXEditable" : role
         }
         return nil
@@ -48,7 +51,8 @@ public final class AXFocusReader: FocusReading {
     nonisolated static func element(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            let value, CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
         return unsafeDowncast(value, to: AXUIElement.self)
     }
 

@@ -1,6 +1,6 @@
 import AppKit
-import Observation
 import OSLog
+import Observation
 import TapeCore
 import TapeMac
 

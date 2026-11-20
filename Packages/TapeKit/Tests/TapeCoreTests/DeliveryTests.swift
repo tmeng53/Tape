@@ -5,11 +5,13 @@ struct DeliveryTests {
     let planner = DeliveryPlanner()
 
     @Test func focusedAtReleaseWins() {
-        #expect(planner.decide(focusedAtRelease: "a", lastDuringRecording: "b") == .paste(into: "a", reason: .focusedAtRelease))
+        let decision = planner.decide(focusedAtRelease: "a", lastDuringRecording: "b")
+        #expect(decision == .paste(into: "a", reason: .focusedAtRelease))
     }
 
     @Test func lastDuringRecordingIsSecond() {
-        #expect(planner.decide(focusedAtRelease: nil, lastDuringRecording: "b") == .paste(into: "b", reason: .lastDuringRecording))
+        let decision = planner.decide(focusedAtRelease: nil, lastDuringRecording: "b")
+        #expect(decision == .paste(into: "b", reason: .lastDuringRecording))
     }
 
     @Test func clipboardWhenNothing() {
@@ -18,7 +20,8 @@ struct DeliveryTests {
 
     @Test func waitsWhenWindowEnabled() {
         let waiting = DeliveryPlanner(waitWindow: 15)
-        #expect(waiting.decide(focusedAtRelease: String?.none, lastDuringRecording: nil) == .waitForNextTextBox(seconds: 15))
+        let decision = waiting.decide(focusedAtRelease: String?.none, lastDuringRecording: nil)
+        #expect(decision == .waitForNextTextBox(seconds: 15))
     }
 
     @Test func terminalsGetPathText() {

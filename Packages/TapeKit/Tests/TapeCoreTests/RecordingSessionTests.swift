@@ -44,7 +44,8 @@ struct RecordingSessionTests {
     let recorder = FakeRecorder()
     let focus = FakeFocus()
     let delivery = FakeDelivery()
-    let claude = FocusTarget(processID: 42, bundleID: "com.anthropic.claudefordesktop", appName: "Claude", role: "AXTextArea")
+    let claude = FocusTarget(
+        processID: 42, bundleID: "com.anthropic.claudefordesktop", appName: "Claude", role: "AXTextArea")
     let terminal = FocusTarget(processID: 7, bundleID: "com.apple.Terminal", appName: "Terminal", role: "AXTextArea")
 
     func makeSession() -> (RecordingSession, LocalClipStore) {

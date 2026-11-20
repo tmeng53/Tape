@@ -1,6 +1,6 @@
+import AVFoundation
 import AppKit
 import ApplicationServices
-import AVFoundation
 import CoreGraphics
 
 public enum Permission: CaseIterable, Sendable {
