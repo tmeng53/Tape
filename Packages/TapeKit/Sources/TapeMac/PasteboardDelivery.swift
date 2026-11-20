@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
+import OSLog
 import TapeCore
 
 public enum PasteError: Error {
@@ -8,14 +9,15 @@ public enum PasteError: Error {
     case notFrontmost
 }
 
-public final class PasteboardDelivery: ClipDelivering, @unchecked Sendable {
+@MainActor
+public final class PasteboardDelivery: ClipDelivering {
     private let restoreDelay: Duration
+    private let log = Logger(subsystem: TapeLog.subsystem, category: "paste")
 
     public init(restoreDelay: Duration = .milliseconds(1500)) {
         self.restoreDelay = restoreDelay
     }
 
-    @MainActor
     public func paste(_ fileURL: URL, into target: FocusTarget, recipe: PasteRecipe) async throws {
         guard let app = NSRunningApplication(processIdentifier: target.processID) else { throw PasteError.appGone }
         try await bringForward(app)
@@ -34,12 +36,10 @@ public final class PasteboardDelivery: ClipDelivering, @unchecked Sendable {
         }
     }
 
-    @MainActor
     public func copyToClipboard(_ fileURL: URL) {
         write(fileURL, recipe: .fileReference, to: .general)
     }
 
-    @MainActor
     private func write(_ fileURL: URL, recipe: PasteRecipe, to pasteboard: NSPasteboard) {
         pasteboard.clearContents()
         switch recipe {
@@ -50,7 +50,6 @@ public final class PasteboardDelivery: ClipDelivering, @unchecked Sendable {
         }
     }
 
-    @MainActor
     private func bringForward(_ app: NSRunningApplication) async throws {
         if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier { return }
         let element = AXUIElementCreateApplication(app.processIdentifier)
@@ -60,10 +59,11 @@ public final class PasteboardDelivery: ClipDelivering, @unchecked Sendable {
             if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier { return }
             try? await Task.sleep(for: .milliseconds(25))
         }
+        log.error("\(app.bundleIdentifier ?? "app", privacy: .public) did not come to the front")
         throw PasteError.notFrontmost
     }
 
-    static func postCommandV(to processID: pid_t) {
+    nonisolated static func postCommandV(to processID: pid_t) {
         let source = CGEventSource(stateID: .combinedSessionState)
         source?.userData = 0x7461_7065
         let keyCode = CGKeyCode(kVK_ANSI_V)
@@ -75,7 +75,6 @@ public final class PasteboardDelivery: ClipDelivering, @unchecked Sendable {
         up?.postToPid(processID)
     }
 
-    @MainActor
     static func snapshot(_ pasteboard: NSPasteboard) -> [NSPasteboardItem]? {
         guard let items = pasteboard.pasteboardItems, !items.isEmpty else { return nil }
         var copies: [NSPasteboardItem] = []
@@ -90,7 +89,7 @@ public final class PasteboardDelivery: ClipDelivering, @unchecked Sendable {
         return copies
     }
 
-    static func shellQuoted(_ path: String) -> String {
+    nonisolated static func shellQuoted(_ path: String) -> String {
         let safe = path.allSatisfy { $0.isLetter || $0.isNumber || "/._-+".contains($0) }
         return safe ? path : "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }

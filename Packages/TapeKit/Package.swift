@@ -10,11 +10,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "TapeCore"),
-        .target(
-            name: "TapeMac",
-            dependencies: ["TapeCore"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
+        .target(name: "TapeMac", dependencies: ["TapeCore"]),
         .testTarget(name: "TapeCoreTests", dependencies: ["TapeCore"]),
     ]
 )

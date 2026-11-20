@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import OSLog
 import TapeCore
 import TapeMac
 
@@ -22,6 +23,10 @@ final class AppModel {
     @ObservationIgnored private let tap: TalkKeyTap
     @ObservationIgnored private var maxDurationTask: Task<Void, Never>?
     @ObservationIgnored private var settleTask: Task<Void, Never>?
+    @ObservationIgnored private var actionLoop: Task<Void, Never>?
+    @ObservationIgnored private let actions: AsyncStream<TalkGesture.Action>
+    @ObservationIgnored private let actionSink: AsyncStream<TalkGesture.Action>.Continuation
+    @ObservationIgnored private let log = Logger(subsystem: TapeLog.subsystem, category: "app")
 
     static let talkKeyDefaultsKey = "talkKey"
     static let maxDuration: Duration = .seconds(300)
@@ -38,12 +43,12 @@ final class AppModel {
             store: LocalClipStore(root: clipsFolder)
         )
         tap = TalkKeyTap(talkKey: initialKey)
+        let (actions, continuation) = AsyncStream.makeStream(of: TalkGesture.Action.self)
+        self.actions = actions
+        actionSink = continuation
 
         session.onStatus = { [weak self] in self?.statusChanged($0) }
-        tap.onAction = { [weak self] action in
-            guard let self else { return }
-            Task { await self.session.perform(action) }
-        }
+        tap.onAction = { continuation.yield($0) }
     }
 
     var isRecording: Bool {
@@ -52,6 +57,7 @@ final class AppModel {
     }
 
     func launch() async {
+        startActionLoop()
         for permission in Permission.allCases where !permission.isGranted {
             await permission.request()
         }
@@ -62,6 +68,17 @@ final class AppModel {
         }
         keyTapRunning = true
         refreshPermissions()
+    }
+
+    private func startActionLoop() {
+        guard actionLoop == nil else { return }
+        let session = session
+        let actions = actions
+        actionLoop = Task {
+            for await action in actions {
+                await session.perform(action)
+            }
+        }
     }
 
     func refreshPermissions() {
@@ -83,13 +100,18 @@ final class AppModel {
                     try? await Task.sleep(for: Self.maxDuration)
                     guard let self, !Task.isCancelled, self.isRecording else { return }
                     self.tap.recordingEndedExternally()
-                    await self.session.perform(.stopAndDeliver)
+                    self.actionSink.yield(.stopAndDeliver)
                 }
             }
         case .pasted, .copied, .kept, .failed:
             maxDurationTask?.cancel()
             maxDurationTask = nil
-            if case .failed = newStatus { NSSound(named: "Basso")?.play() } else { NSSound(named: "Pop")?.play() }
+            if case let .failed(message) = newStatus {
+                log.error("\(message, privacy: .public)")
+                NSSound(named: "Basso")?.play()
+            } else {
+                NSSound(named: "Pop")?.play()
+            }
             settleTask?.cancel()
             settleTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(3))

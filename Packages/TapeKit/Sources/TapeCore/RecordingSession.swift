@@ -146,7 +146,12 @@ public final class RecordingSession {
             videoFile: draft.videoURL.lastPathComponent,
             delivery: outcome
         )
-        try? store.finish(draft, manifest: manifest)
+        do {
+            try store.finish(draft, manifest: manifest)
+        } catch {
+            status = .failed("Couldn't save the clip's details")
+            return
+        }
 
         switch outcome {
         case let .pasted(_, appName): status = .pasted(appName: appName)

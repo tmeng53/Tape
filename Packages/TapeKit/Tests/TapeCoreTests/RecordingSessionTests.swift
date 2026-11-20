@@ -130,4 +130,22 @@ struct RecordingSessionTests {
         if case .failed = session.status {} else { Issue.record("expected failure, got \(session.status)") }
         #expect(delivery.pasted.isEmpty && delivery.copied.isEmpty)
     }
+
+    @Test func manifestWriteFailureIsReported() async throws {
+        let blocked = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let store = FailingFinishStore(root: blocked)
+        let session = RecordingSession(recorder: recorder, focus: focus, delivery: delivery, store: store)
+        session.start()
+        await session.perform(.cancelRecording)
+
+        if case .failed = session.status {} else { Issue.record("expected failure, got \(session.status)") }
+    }
+}
+
+final class FailingFinishStore: ClipStoring, @unchecked Sendable {
+    let inner: LocalClipStore
+    init(root: URL) { inner = LocalClipStore(root: root) }
+    func makeDraft(at date: Date) throws -> ClipDraft { try inner.makeDraft(at: date) }
+    func finish(_ draft: ClipDraft, manifest: ClipManifest) throws { throw CocoaError(.fileWriteNoPermission) }
+    func discard(_ draft: ClipDraft) { inner.discard(draft) }
 }

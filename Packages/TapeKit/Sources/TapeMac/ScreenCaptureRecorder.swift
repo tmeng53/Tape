@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import OSLog
 import ScreenCaptureKit
 import TapeCore
 
@@ -8,24 +9,29 @@ public enum RecorderError: Error {
     case notRecording
 }
 
-public final class ScreenCaptureRecorder: NSObject, ScreenRecording, SCRecordingOutputDelegate, SCStreamDelegate, @unchecked Sendable {
+@MainActor
+public final class ScreenCaptureRecorder: NSObject, ScreenRecording {
+    private let log = Logger(subsystem: TapeLog.subsystem, category: "recording")
     private var stream: SCStream?
+    private var output: SCRecordingOutput?
     private var finished: CheckedContinuation<Void, Error>?
-    private var started: CheckedContinuation<Void, Error>?
-    private let lock = NSLock()
+    private var finishError: Error?
+    private var didFinish = false
 
     public override init() {}
 
     public func start(writingTo url: URL) async throws {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        let displayID = await MainActor.run { Self.displayUnderCursor() }
-        guard let display = content.displays.first(where: { $0.displayID == displayID }) ?? content.displays.first else {
+        let displayID = Self.displayUnderCursor()
+        guard let display = content.displays.first(where: { $0.displayID == displayID }) ?? content.displays.first
+        else {
             throw RecorderError.noDisplay
         }
-        let ownApps = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let ownApps = content.applications.filter { $0.processID == ownPID }
         let filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
 
-        let scale = await MainActor.run { Self.backingScale(for: displayID) }
+        let scale = Double(Self.backingScale(for: displayID))
         let config = SCStreamConfiguration()
         config.width = Int(Double(display.width) * scale)
         config.height = Int(Double(display.height) * scale)
@@ -42,71 +48,67 @@ public final class ScreenCaptureRecorder: NSObject, ScreenRecording, SCRecording
         let output = SCRecordingOutput(configuration: recordingConfig, delegate: self)
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addRecordingOutput(output)
-        lock.withLock { self.stream = stream }
-
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            lock.withLock { started = continuation }
-            stream.startCapture { error in
-                if let error { self.resumeStarted(throwing: error) }
-            }
+        self.stream = stream
+        self.output = output
+        didFinish = false
+        finishError = nil
+        do {
+            try await stream.startCapture()
+        } catch {
+            log.error("startCapture failed: \(error.localizedDescription, privacy: .public)")
+            self.stream = nil
+            self.output = nil
+            throw error
         }
     }
 
     public func stop() async throws {
-        guard let stream = lock.withLock({ self.stream }) else { throw RecorderError.notRecording }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            lock.withLock { finished = continuation }
-            stream.stopCapture { error in
-                if let error { self.resumeFinished(throwing: error) }
+        guard let stream else { throw RecorderError.notRecording }
+        try await stream.stopCapture()
+        if !didFinish {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                finished = continuation
             }
+        } else if let finishError {
+            throw finishError
         }
-        lock.withLock { self.stream = nil }
+        self.stream = nil
+        self.output = nil
     }
 
-    public func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
-        resumeStarted(throwing: nil)
+    private func recordingEnded(_ error: Error?) {
+        if let error { log.error("recording ended: \(error.localizedDescription, privacy: .public)") }
+        didFinish = true
+        finishError = error
+        guard let continuation = finished else { return }
+        finished = nil
+        if let error { continuation.resume(throwing: error) } else { continuation.resume() }
     }
 
-    public func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
-        resumeStarted(throwing: error)
-        resumeFinished(throwing: error)
-    }
-
-    public func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
-        resumeFinished(throwing: nil)
-    }
-
-    public func stream(_ stream: SCStream, didStopWithError error: Error) {
-        resumeStarted(throwing: error)
-        resumeFinished(throwing: error)
-    }
-
-    private func resumeStarted(throwing error: Error?) {
-        let continuation = lock.withLock { () -> CheckedContinuation<Void, Error>? in
-            defer { started = nil }
-            return started
-        }
-        if let error { continuation?.resume(throwing: error) } else { continuation?.resume() }
-    }
-
-    private func resumeFinished(throwing error: Error?) {
-        let continuation = lock.withLock { () -> CheckedContinuation<Void, Error>? in
-            defer { finished = nil }
-            return finished
-        }
-        if let error { continuation?.resume(throwing: error) } else { continuation?.resume() }
-    }
-
-    @MainActor
     private static func displayUnderCursor() -> CGDirectDisplayID {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
         return screen?.displayID ?? CGMainDisplayID()
     }
 
-    @MainActor
-    private static func backingScale(for displayID: CGDirectDisplayID) -> Double {
-        Double(NSScreen.screens.first { $0.displayID == displayID }?.backingScaleFactor ?? 2)
+    private static func backingScale(for displayID: CGDirectDisplayID) -> CGFloat {
+        NSScreen.screens.first { $0.displayID == displayID }?.backingScaleFactor ?? 2
+    }
+}
+
+extension ScreenCaptureRecorder: SCRecordingOutputDelegate {
+    public nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
+        Task { @MainActor in self.recordingEnded(error) }
+    }
+
+    public nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
+        Task { @MainActor in self.recordingEnded(nil) }
+    }
+}
+
+extension ScreenCaptureRecorder: SCStreamDelegate {
+    public nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
+        Task { @MainActor in self.recordingEnded(error) }
     }
 }
 

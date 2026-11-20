@@ -1,17 +1,26 @@
+import AppKit
 import SwiftUI
 import TapeCore
 import TapeMac
 
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let model = AppModel()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Task { await model.launch() }
+    }
+}
+
 @main
 struct TapeApp: App {
-    @State private var model = AppModel()
+    @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(model: model)
+            MenuContent(model: delegate.model)
         } label: {
-            Image(systemName: model.menuBarSymbol)
-                .task { await model.launch() }
+            Image(systemName: delegate.model.menuBarSymbol)
+                .accessibilityLabel(delegate.model.statusLine)
         }
         .menuBarExtraStyle(.menu)
     }
@@ -64,13 +73,14 @@ extension AppModel {
     var statusLine: String {
         switch status {
         case .idle, .kept:
-            if !keyTapRunning { return "Waiting for Accessibility permission" }
-            return "Hold \(talkKey.displayName) to talk, or tap it to start"
+            if !keyTapRunning { return String(localized: "Waiting for Accessibility permission") }
+            return String(localized: "Hold \(talkKey.displayName) to talk, or tap it to start")
         case let .recording(_, target):
-            return target.map { "Recording → \($0.appName)" } ?? "Recording"
-        case .finishing: return "Finishing clip…"
-        case let .pasted(appName): return "Pasted into \(appName)"
-        case .copied: return "Copied. Press ⌘V to paste"
+            guard let target else { return String(localized: "Recording") }
+            return String(localized: "Recording → \(target.appName)")
+        case .finishing: return String(localized: "Finishing clip…")
+        case let .pasted(appName): return String(localized: "Pasted into \(appName)")
+        case .copied: return String(localized: "Copied. Press ⌘V to paste")
         case let .failed(message): return message
         }
     }

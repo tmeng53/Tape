@@ -54,12 +54,12 @@ public enum ClipNaming {
     }
 }
 
-public final class LocalClipStore: ClipStoring, @unchecked Sendable {
+public final class LocalClipStore: ClipStoring {
     public let root: URL
     private let fileManager: FileManager
-    private let makeID: () -> UUID
+    private let makeID: @Sendable () -> UUID
 
-    public init(root: URL, fileManager: FileManager = .default, makeID: @escaping () -> UUID = UUID.init) {
+    public init(root: URL, fileManager: FileManager = .default, makeID: @escaping @Sendable () -> UUID = { UUID() }) {
         self.root = root
         self.fileManager = fileManager
         self.makeID = makeID

@@ -35,7 +35,9 @@ public final class TalkKeyTap {
         let callback: CGEventTapCallBack = { proxy, type, event, refcon in
             guard let refcon else { return Unmanaged.passUnretained(event) }
             let tap = Unmanaged<TalkKeyTap>.fromOpaque(refcon).takeUnretainedValue()
-            return MainActor.assumeIsolated { tap.handle(proxy: proxy, type: type, event: event) }
+            nonisolated(unsafe) var result: Unmanaged<CGEvent>?
+            MainActor.assumeIsolated { result = tap.handle(proxy: proxy, type: type, event: event) }
+            return result
         }
         guard let port = CGEvent.tapCreate(
             tap: .cghidEventTap,

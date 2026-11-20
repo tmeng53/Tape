@@ -24,14 +24,14 @@ public enum Permission: CaseIterable, Sendable {
         }
     }
 
-    var settingsURL: URL {
+    var settingsURL: URL? {
         let anchor: String
         switch self {
         case .accessibility: anchor = "Privacy_Accessibility"
         case .screenRecording: anchor = "Privacy_ScreenCapture"
         case .microphone: anchor = "Privacy_Microphone"
         }
-        return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!
+        return URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?\(anchor)")
     }
 
     @MainActor
@@ -62,6 +62,7 @@ public enum Permission: CaseIterable, Sendable {
 
     @MainActor
     public func openSettings() {
+        guard let settingsURL else { return }
         NSWorkspace.shared.open(settingsURL)
     }
 }
