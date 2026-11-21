@@ -85,12 +85,16 @@ final class AppModel {
     private func play(_ cue: SoundCue) {
         let name =
             switch cue {
-            case .start: "Tink"
-            case .stop: "Pop"
-            case .failure: "Basso"
+            case .start: "tape-start"
+            case .stop: "tape-stop"
+            case .failure: "tape-failure"
             }
         log.debug("cue \(String(describing: cue), privacy: .public)")
-        NSSound(named: name)?.play()
+        guard let sound = NSSound(named: name) else {
+            log.error("missing sound \(name, privacy: .public)")
+            return
+        }
+        sound.play()
     }
 
     func refreshPermissions() {
