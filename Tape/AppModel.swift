@@ -81,6 +81,16 @@ final class AppModel {
         }
     }
 
+    private func play(_ cue: SoundCue) {
+        let name =
+            switch cue {
+            case .start: "Tink"
+            case .stop: "Pop"
+            case .failure: "Basso"
+            }
+        NSSound(named: name)?.play()
+    }
+
     func refreshPermissions() {
         missingPermissions = Permission.allCases.filter { !$0.isGranted }
     }
@@ -91,10 +101,10 @@ final class AppModel {
     }
 
     private func statusChanged(_ newStatus: SessionStatus) {
+        if let cue = SoundCue(from: status, to: newStatus) { play(cue) }
         status = newStatus
         switch newStatus {
         case .recording:
-            NSSound(named: "Tink")?.play()
             if maxDurationTask == nil {
                 maxDurationTask = Task { [weak self] in
                     try? await Task.sleep(for: Self.maxDuration)
@@ -108,9 +118,6 @@ final class AppModel {
             maxDurationTask = nil
             if case let .failed(message) = newStatus {
                 log.error("\(message, privacy: .public)")
-                NSSound(named: "Basso")?.play()
-            } else {
-                NSSound(named: "Pop")?.play()
             }
             settleTask?.cancel()
             settleTask = Task { [weak self] in
