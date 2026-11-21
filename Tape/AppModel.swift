@@ -88,6 +88,7 @@ final class AppModel {
             case .stop: "Pop"
             case .failure: "Basso"
             }
+        log.debug("cue \(String(describing: cue), privacy: .public)")
         NSSound(named: name)?.play()
     }
 
