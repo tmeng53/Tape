@@ -89,21 +89,27 @@ public final class RecordingSession {
         if current != shown { status = .recording(startedAt: startedAt, target: current) }
     }
 
-    private func stopRecorder() async -> Bool {
+    private enum StopResult {
+        case finished
+        case neverStarted
+        case stopFailed
+    }
+
+    private func stopRecorder() async -> StopResult {
         pollTask?.cancel()
         pollTask = nil
         do {
             try await startTask?.value
         } catch {
             startTask = nil
-            return false
+            return .neverStarted
         }
         startTask = nil
         do {
             try await recorder.stop()
-            return true
+            return .finished
         } catch {
-            return false
+            return .stopFailed
         }
     }
 
@@ -112,10 +118,10 @@ public final class RecordingSession {
         let focusedAtRelease = deliver ? focus.focusedTextTarget() : nil
         let fallback = lastTarget
         status = .finishing
-        let recorded = await stopRecorder()
+        let stopResult = await stopRecorder()
         self.draft = nil
         lastTarget = nil
-        guard recorded else {
+        if stopResult == .neverStarted {
             store.discard(draft)
             status = .failed("Recording failed. Check Screen Recording and Microphone in System Settings.")
             return
@@ -123,7 +129,7 @@ public final class RecordingSession {
 
         let duration = now().timeIntervalSince(draft.createdAt)
         var outcome: ClipManifest.Delivery = .kept
-        if deliver {
+        if deliver && stopResult == .finished {
             switch planner.decide(focusedAtRelease: focusedAtRelease, lastDuringRecording: fallback) {
             case let .paste(target, _):
                 do {
@@ -150,6 +156,11 @@ public final class RecordingSession {
             try store.finish(draft, manifest: manifest)
         } catch {
             status = .failed("Couldn't save the clip's details")
+            return
+        }
+
+        if stopResult == .stopFailed {
+            status = .failed("The recording may be incomplete. It's kept in the clips folder.")
             return
         }
 

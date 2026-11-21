@@ -7,21 +7,27 @@ import TapeCore
 public enum PasteError: Error {
     case appGone
     case notFrontmost
+    case noTextBoxFocused
 }
 
 @MainActor
 public final class PasteboardDelivery: ClipDelivering {
+    private let focus: FocusReading
     private let restoreDelay: Duration
+    private var restoreTask: Task<Void, Never>?
     private let log = Logger(subsystem: TapeLog.subsystem, category: "paste")
 
-    public init(restoreDelay: Duration = .milliseconds(1500)) {
+    public init(focus: FocusReading, restoreDelay: Duration = .milliseconds(1500)) {
+        self.focus = focus
         self.restoreDelay = restoreDelay
     }
 
     public func paste(_ fileURL: URL, into target: FocusTarget, recipe: PasteRecipe) async throws {
         guard let app = NSRunningApplication(processIdentifier: target.processID) else { throw PasteError.appGone }
         try await bringForward(app)
+        try await waitForTextBox(in: target.processID)
 
+        restoreTask?.cancel()
         let pasteboard = NSPasteboard.general
         let saved = Self.snapshot(pasteboard)
         write(fileURL, recipe: recipe, to: pasteboard)
@@ -29,11 +35,23 @@ public final class PasteboardDelivery: ClipDelivering {
 
         Self.postCommandV(to: target.processID)
 
-        try? await Task.sleep(for: restoreDelay)
-        if pasteboard.changeCount == ourChange, let saved {
+        guard let saved else { return }
+        let delay = restoreDelay
+        restoreTask = Task {
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, pasteboard.changeCount == ourChange else { return }
             pasteboard.clearContents()
             pasteboard.writeObjects(saved)
         }
+    }
+
+    private func waitForTextBox(in processID: pid_t) async throws {
+        for _ in 0..<20 {
+            if focus.focusedTextTarget()?.processID == processID { return }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        log.error("no text box focused in the target app")
+        throw PasteError.noTextBoxFocused
     }
 
     public func copyToClipboard(_ fileURL: URL) {

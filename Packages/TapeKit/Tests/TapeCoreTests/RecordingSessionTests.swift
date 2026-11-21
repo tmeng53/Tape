@@ -6,6 +6,7 @@ final class FakeRecorder: ScreenRecording, @unchecked Sendable {
     var started: URL?
     var stopped = false
     var failStart = false
+    var failStop = false
 
     func start(writingTo url: URL) async throws {
         if failStart { throw CocoaError(.fileWriteUnknown) }
@@ -15,6 +16,7 @@ final class FakeRecorder: ScreenRecording, @unchecked Sendable {
 
     func stop() async throws {
         stopped = true
+        if failStop { throw CocoaError(.fileWriteUnknown) }
     }
 }
 
@@ -110,6 +112,22 @@ struct RecordingSessionTests {
         #expect(session.status == .kept)
         let url = try #require(recorder.started)
         #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func stopFailureKeepsClipWithoutPasting() async throws {
+        let (session, store) = makeSession()
+        recorder.failStop = true
+        focus.target = claude
+        session.start()
+        await session.perform(.stopAndDeliver)
+
+        #expect(delivery.pasted.isEmpty)
+        #expect(delivery.copied.isEmpty)
+        if case .failed = session.status {} else { Issue.record("expected failure, got \(session.status)") }
+        let url = try #require(recorder.started)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        let id = try #require(UUID(uuidString: url.deletingLastPathComponent().lastPathComponent))
+        #expect(try store.manifest(for: id).delivery == .kept)
     }
 
     @Test func discardDeletesClip() async throws {

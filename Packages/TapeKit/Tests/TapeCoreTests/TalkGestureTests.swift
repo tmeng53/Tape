@@ -79,4 +79,30 @@ struct TalkGestureTests {
         #expect(g.handle(.talkUp(at: 2)) == .init(.swallow))
         #expect(g.phase == .idle)
     }
+
+    @Test func interruptDuringHoldCancelsAndKeepsClip() {
+        var gesture = TalkGesture()
+        _ = gesture.handle(.talkDown(at: 0, othersHeld: false))
+        _ = gesture.handle(.mouseOther(at: 0.5))
+        #expect(gesture.interrupt() == [.cancelRecording])
+        #expect(gesture.phase == .idle)
+    }
+
+    @Test func interruptDuringHandsFreeCancelsAndKeepsClip() {
+        var gesture = TalkGesture()
+        _ = gesture.handle(.talkDown(at: 0, othersHeld: false))
+        _ = gesture.handle(.talkUp(at: 0.1))
+        #expect(gesture.interrupt() == [.cancelRecording])
+    }
+
+    @Test func interruptBeforeHoldDiscards() {
+        var gesture = TalkGesture()
+        _ = gesture.handle(.talkDown(at: 0, othersHeld: false))
+        #expect(gesture.interrupt() == [.discardRecording])
+    }
+
+    @Test func interruptWhenIdleDoesNothing() {
+        var gesture = TalkGesture()
+        #expect(gesture.interrupt().isEmpty)
+    }
 }

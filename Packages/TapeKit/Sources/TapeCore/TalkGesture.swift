@@ -138,6 +138,15 @@ public struct TalkGesture: Sendable {
         phase = .idle
     }
 
+    public mutating func interrupt() -> [Action] {
+        defer { phase = .idle }
+        switch phase {
+        case .pressed: return [.discardRecording]
+        case .holding, .handsFree: return [.cancelRecording]
+        case .idle, .awaitingTalkUp, .chordPassthrough: return []
+        }
+    }
+
     private mutating func promoteToHoldIfDue(at time: Double) {
         if case let .pressed(since) = phase, time - since >= holdThreshold {
             phase = .holding

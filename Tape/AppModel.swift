@@ -36,10 +36,11 @@ final class AppModel {
         let initialKey = saved ?? .leftControl
         talkKey = initialKey
         clipsFolder = URL.applicationSupportDirectory.appending(path: "Tape/Clips", directoryHint: .isDirectory)
+        let focus = AXFocusReader()
         session = RecordingSession(
             recorder: ScreenCaptureRecorder(),
-            focus: AXFocusReader(),
-            delivery: PasteboardDelivery(),
+            focus: focus,
+            delivery: PasteboardDelivery(focus: focus),
             store: LocalClipStore(root: clipsFolder)
         )
         tap = TalkKeyTap(talkKey: initialKey)
