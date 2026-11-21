@@ -73,13 +73,30 @@ public final class RecordingSession {
         lastTarget = focus.focusedTextTarget()
         status = .recording(startedAt: startedAt, target: lastTarget)
         let recorder = recorder
-        startTask = Task { try await recorder.start(writingTo: newDraft.videoURL) }
+        startTask = Task { [weak self] in
+            do {
+                try await recorder.start(writingTo: newDraft.videoURL)
+            } catch {
+                self?.startFailed(newDraft)
+                throw error
+            }
+        }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: self?.focusPollInterval ?? .milliseconds(250))
                 self?.pollFocus()
             }
         }
+    }
+
+    private func startFailed(_ failed: ClipDraft) {
+        guard draft?.id == failed.id else { return }
+        pollTask?.cancel()
+        pollTask = nil
+        draft = nil
+        lastTarget = nil
+        store.discard(failed)
+        status = .failed("Recording failed. Check Screen Recording and Microphone in System Settings.")
     }
 
     private func pollFocus() {
@@ -121,11 +138,7 @@ public final class RecordingSession {
         let stopResult = await stopRecorder()
         self.draft = nil
         lastTarget = nil
-        if stopResult == .neverStarted {
-            store.discard(draft)
-            status = .failed("Recording failed. Check Screen Recording and Microphone in System Settings.")
-            return
-        }
+        if stopResult == .neverStarted { return }
 
         let duration = now().timeIntervalSince(draft.createdAt)
         var outcome: ClipManifest.Delivery = .kept

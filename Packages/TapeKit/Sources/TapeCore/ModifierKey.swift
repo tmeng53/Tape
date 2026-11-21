@@ -63,6 +63,24 @@ public enum ModifierKey: String, CaseIterable, Codable, Sendable {
     public func isDown(in flags: UInt64) -> Bool {
         flags & deviceMask != 0
     }
+
+    public var otherSide: ModifierKey {
+        switch self {
+        case .leftControl: .rightControl
+        case .rightControl: .leftControl
+        case .leftOption: .rightOption
+        case .rightOption: .leftOption
+        case .leftCommand: .rightCommand
+        case .rightCommand: .leftCommand
+        case .leftShift: .rightShift
+        case .rightShift: .leftShift
+        }
+    }
+
+    public func removed(from flags: UInt64) -> UInt64 {
+        let withoutDevice = flags & ~deviceMask
+        return otherSide.isDown(in: flags) ? withoutDevice : withoutDevice & ~genericMask
+    }
 }
 
 public enum ModifierFlags {

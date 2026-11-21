@@ -106,4 +106,16 @@ struct TalkGestureTests {
         var gesture = TalkGesture()
         #expect(gesture.interrupt().isEmpty)
     }
+
+    @Test func strippingTalkKeyKeepsOtherSideHeld() {
+        let flags = ModifierKey.rightCommand.deviceMask | ModifierKey.leftCommand.deviceMask | ModifierFlags.command
+        let stripped = ModifierKey.rightCommand.removed(from: flags)
+        #expect(stripped & ModifierFlags.command != 0)
+        #expect(stripped & ModifierKey.rightCommand.deviceMask == 0)
+    }
+
+    @Test func strippingTalkKeyAloneClearsGenericFlag() {
+        let flags = ModifierKey.leftControl.deviceMask | ModifierFlags.control
+        #expect(ModifierKey.leftControl.removed(from: flags) == 0)
+    }
 }

@@ -98,7 +98,7 @@ public final class TalkKeyTap {
         case .swallow:
             return nil
         case .passStrippingTalkModifier:
-            event.flags = CGEventFlags(rawValue: event.flags.rawValue & ~(talkKey.genericMask | talkKey.deviceMask))
+            event.flags = CGEventFlags(rawValue: talkKey.removed(from: event.flags.rawValue))
             return Unmanaged.passUnretained(event)
         case .replayTalkDownThenPass:
             if let heldTalkDown { heldTalkDown.tapPostEvent(proxy) }

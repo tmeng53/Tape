@@ -150,6 +150,16 @@ struct RecordingSessionTests {
         #expect(delivery.pasted.isEmpty && delivery.copied.isEmpty)
     }
 
+    @Test func failedStartIsReportedRightAway() async throws {
+        let (session, _) = makeSession()
+        recorder.failStart = true
+        session.start()
+        for _ in 0..<100 where session.isActive { await Task.yield() }
+
+        #expect(!session.isActive)
+        if case .failed = session.status {} else { Issue.record("expected failure, got \(session.status)") }
+    }
+
     @Test func manifestWriteFailureIsReported() async throws {
         let blocked = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let store = FailingFinishStore(root: blocked)

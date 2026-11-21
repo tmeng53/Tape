@@ -6,8 +6,19 @@ import TapeMac
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
 
+    private var quitTask: Task<Void, Never>?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await model.launch() }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard model.hasActiveRecording, quitTask == nil else { return .terminateNow }
+        quitTask = Task {
+            await model.finishBeforeQuit()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }
 

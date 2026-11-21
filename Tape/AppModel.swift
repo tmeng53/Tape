@@ -57,6 +57,17 @@ final class AppModel {
         return false
     }
 
+    var hasActiveRecording: Bool { session.isActive }
+
+    func finishBeforeQuit() async {
+        guard session.isActive else { return }
+        tap.recordingEndedExternally()
+        actionSink.yield(.cancelRecording)
+        for _ in 0..<100 where session.isActive {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     func launch() async {
         startActionLoop()
         for permission in Permission.allCases where !permission.isGranted {
@@ -120,6 +131,7 @@ final class AppModel {
             maxDurationTask = nil
             if case let .failed(message) = newStatus {
                 log.error("\(message, privacy: .public)")
+                tap.recordingEndedExternally()
             }
             settleTask?.cancel()
             settleTask = Task { [weak self] in
