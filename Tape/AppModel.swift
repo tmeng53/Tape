@@ -1,0 +1,154 @@
+import AppKit
+import OSLog
+import Observation
+import TapeCore
+import TapeMac
+
+@MainActor
+@Observable
+final class AppModel {
+    private(set) var status: SessionStatus = .idle
+    private(set) var missingPermissions: [Permission] = []
+    private(set) var keyTapRunning = false
+
+    var talkKey: ModifierKey {
+        didSet {
+            UserDefaults.standard.set(talkKey.rawValue, forKey: Self.talkKeyDefaultsKey)
+            tap.talkKey = talkKey
+        }
+    }
+
+    let clipsFolder: URL
+    @ObservationIgnored private let session: RecordingSession
+    @ObservationIgnored private let tap: TalkKeyTap
+    @ObservationIgnored private var maxDurationTask: Task<Void, Never>?
+    @ObservationIgnored private var settleTask: Task<Void, Never>?
+    @ObservationIgnored private var actionLoop: Task<Void, Never>?
+    @ObservationIgnored private let actions: AsyncStream<TalkGesture.Action>
+    @ObservationIgnored private let actionSink: AsyncStream<TalkGesture.Action>.Continuation
+    @ObservationIgnored private let log = Logger(subsystem: TapeLog.subsystem, category: "app")
+
+    static let talkKeyDefaultsKey = "talkKey"
+    static let maxDuration: Duration = .seconds(300)
+
+    init() {
+        let saved = UserDefaults.standard.string(forKey: Self.talkKeyDefaultsKey).flatMap(ModifierKey.init(rawValue:))
+        let initialKey = saved ?? .leftControl
+        talkKey = initialKey
+        clipsFolder = URL.applicationSupportDirectory.appending(path: "Tape/Clips", directoryHint: .isDirectory)
+        let focus = AXFocusReader()
+        let recorder = ScreenCaptureRecorder()
+        session = RecordingSession(
+            recorder: recorder,
+            focus: focus,
+            delivery: PasteboardDelivery(focus: focus),
+            store: LocalClipStore(root: clipsFolder)
+        )
+        tap = TalkKeyTap(talkKey: initialKey)
+        let (actions, continuation) = AsyncStream.makeStream(of: TalkGesture.Action.self)
+        self.actions = actions
+        actionSink = continuation
+
+        session.onStatus = { [weak self] in self?.statusChanged($0) }
+        tap.onAction = { continuation.yield($0) }
+        let tap = tap
+        recorder.onUnexpectedStop = { _ in tap.captureFailed() }
+    }
+
+    var isRecording: Bool {
+        if case .recording = status { return true }
+        return false
+    }
+
+    var hasActiveRecording: Bool { session.isActive }
+
+    func finishBeforeQuit() async {
+        guard session.isActive else { return }
+        tap.recordingEndedExternally()
+        actionSink.yield(.cancelRecording)
+        for _ in 0..<100 where session.isActive {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    func launch() async {
+        startActionLoop()
+        for permission in Permission.allCases where !permission.isGranted {
+            await permission.request()
+        }
+        refreshPermissions()
+        while !tap.start() {
+            try? await Task.sleep(for: .seconds(2))
+            refreshPermissions()
+        }
+        keyTapRunning = true
+        refreshPermissions()
+    }
+
+    private func startActionLoop() {
+        guard actionLoop == nil else { return }
+        let session = session
+        let actions = actions
+        actionLoop = Task {
+            for await action in actions {
+                await session.perform(action)
+            }
+        }
+    }
+
+    private func play(_ cue: SoundCue) {
+        let name =
+            switch cue {
+            case .start: "Tink"
+            case .stop: "Pop"
+            case .failure: "Basso"
+            }
+        log.debug("cue \(String(describing: cue), privacy: .public)")
+        NSSound(named: name)?.play()
+    }
+
+    func refreshPermissions() {
+        missingPermissions = Permission.allCases.filter { !$0.isGranted }
+    }
+
+    func openClipsFolder() {
+        try? FileManager.default.createDirectory(at: clipsFolder, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(clipsFolder)
+    }
+
+    private func statusChanged(_ newStatus: SessionStatus) {
+        if let cue = SoundCue(from: status, to: newStatus) { play(cue) }
+        status = newStatus
+        switch newStatus {
+        case .recording:
+            if maxDurationTask == nil {
+                maxDurationTask = Task { [weak self] in
+                    try? await Task.sleep(for: Self.maxDuration)
+                    guard let self, !Task.isCancelled, self.isRecording else { return }
+                    self.tap.recordingEndedExternally()
+                    self.actionSink.yield(.stopAndDeliver)
+                }
+            }
+        case .pasted, .copied, .kept, .failed:
+            maxDurationTask?.cancel()
+            maxDurationTask = nil
+            if case let .failed(message) = newStatus {
+                log.error("\(message, privacy: .public)")
+                tap.recordingEndedExternally()
+            }
+            settleTask?.cancel()
+            settleTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, !Task.isCancelled else { return }
+                if case .recording = self.status { return }
+                if case .finishing = self.status { return }
+                self.status = .idle
+            }
+        case .idle, .finishing:
+            if case .idle = newStatus {
+                maxDurationTask?.cancel()
+                maxDurationTask = nil
+            }
+        }
+    }
+}
