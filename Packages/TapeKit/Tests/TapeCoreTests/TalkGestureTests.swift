@@ -95,10 +95,11 @@ struct TalkGestureTests {
         #expect(gesture.interrupt() == [.cancelRecording])
     }
 
-    @Test func interruptBeforeHoldDiscards() {
+    @Test func interruptKeepsClipEvenBeforeHoldIsPromoted() {
         var gesture = TalkGesture()
         _ = gesture.handle(.talkDown(at: 0, othersHeld: false))
-        #expect(gesture.interrupt() == [.discardRecording])
+        #expect(gesture.interrupt() == [.cancelRecording])
+        #expect(gesture.phase == .idle)
     }
 
     @Test func interruptWhenIdleDoesNothing() {

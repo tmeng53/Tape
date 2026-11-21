@@ -15,6 +15,7 @@ public final class PasteboardDelivery: ClipDelivering {
     private let focus: FocusReading
     private let restoreDelay: Duration
     private var restoreTask: Task<Void, Never>?
+    private var pendingRestore: (original: [NSPasteboardItem], ourChange: Int)?
     private let log = Logger(subsystem: TapeLog.subsystem, category: "paste")
 
     public init(focus: FocusReading, restoreDelay: Duration = .milliseconds(1500)) {
@@ -29,20 +30,33 @@ public final class PasteboardDelivery: ClipDelivering {
 
         restoreTask?.cancel()
         let pasteboard = NSPasteboard.general
-        let saved = Self.snapshot(pasteboard)
+        let original = originalClipboard(of: pasteboard)
         write(fileURL, recipe: recipe, to: pasteboard)
         let ourChange = pasteboard.changeCount
 
         Self.postCommandV(to: target.processID)
 
-        guard let saved else { return }
-        let delay = restoreDelay
-        restoreTask = Task {
-            try? await Task.sleep(for: delay)
-            guard !Task.isCancelled, pasteboard.changeCount == ourChange else { return }
-            pasteboard.clearContents()
-            pasteboard.writeObjects(saved)
+        guard let original else {
+            pendingRestore = nil
+            return
         }
+        pendingRestore = (original, ourChange)
+        let delay = restoreDelay
+        restoreTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.pendingRestore = nil
+            guard pasteboard.changeCount == ourChange else { return }
+            pasteboard.clearContents()
+            pasteboard.writeObjects(original)
+        }
+    }
+
+    private func originalClipboard(of pasteboard: NSPasteboard) -> [NSPasteboardItem]? {
+        if let pendingRestore, pasteboard.changeCount == pendingRestore.ourChange {
+            return pendingRestore.original
+        }
+        return Self.snapshot(pasteboard)
     }
 
     private func waitForTextBox(in processID: pid_t) async throws {

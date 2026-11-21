@@ -7,7 +7,7 @@ public final class TalkKeyTap {
     public static let syntheticEventMarker: Int64 = 0x7461_7065
 
     public var talkKey: ModifierKey {
-        didSet { gesture.reset() }
+        didSet { interruptGesture() }
     }
     public var onAction: (TalkGesture.Action) -> Void = { _ in }
     public private(set) var isRunning = false
@@ -63,7 +63,12 @@ public final class TalkKeyTap {
         tap = nil
         runLoopSource = nil
         isRunning = false
-        gesture.reset()
+        interruptGesture()
+    }
+
+    private func interruptGesture() {
+        heldTalkDown = nil
+        gesture.interrupt().forEach(onAction)
     }
 
     public func recordingEndedExternally() {
@@ -73,7 +78,7 @@ public final class TalkKeyTap {
     private func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-            gesture.interrupt().forEach(onAction)
+            interruptGesture()
             return Unmanaged.passUnretained(event)
         }
         if event.getIntegerValueField(.eventSourceUserData) == Self.syntheticEventMarker {

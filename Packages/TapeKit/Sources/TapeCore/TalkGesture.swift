@@ -134,17 +134,10 @@ public struct TalkGesture: Sendable {
         }
     }
 
-    public mutating func reset() {
-        phase = .idle
-    }
-
     public mutating func interrupt() -> [Action] {
-        defer { phase = .idle }
-        switch phase {
-        case .pressed: return [.discardRecording]
-        case .holding, .handsFree: return [.cancelRecording]
-        case .idle, .awaitingTalkUp, .chordPassthrough: return []
-        }
+        let wasRecording = isRecording
+        phase = .idle
+        return wasRecording ? [.cancelRecording] : []
     }
 
     private mutating func promoteToHoldIfDue(at time: Double) {
