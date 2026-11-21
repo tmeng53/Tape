@@ -17,6 +17,8 @@ public final class ScreenCaptureRecorder: NSObject, ScreenRecording {
     private var finished: CheckedContinuation<Void, Error>?
     private var finishError: Error?
     private var didFinish = false
+    private var isStopping = false
+    public var onUnexpectedStop: (Error) -> Void = { _ in }
 
     public override init() {}
 
@@ -52,6 +54,7 @@ public final class ScreenCaptureRecorder: NSObject, ScreenRecording {
         self.output = output
         didFinish = false
         finishError = nil
+        isStopping = false
         do {
             try await stream.startCapture()
         } catch {
@@ -64,6 +67,7 @@ public final class ScreenCaptureRecorder: NSObject, ScreenRecording {
 
     public func stop() async throws {
         guard let stream else { throw RecorderError.notRecording }
+        isStopping = true
         try await stream.stopCapture()
         if !didFinish {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -78,8 +82,10 @@ public final class ScreenCaptureRecorder: NSObject, ScreenRecording {
 
     private func recordingEnded(_ error: Error?) {
         if let error { log.error("recording ended: \(error.localizedDescription, privacy: .public)") }
+        let firstEnd = !didFinish
         didFinish = true
         finishError = error
+        if let error, firstEnd, !isStopping, stream != nil { onUnexpectedStop(error) }
         guard let continuation = finished else { return }
         finished = nil
         if let error { continuation.resume(throwing: error) } else { continuation.resume() }

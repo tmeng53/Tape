@@ -37,8 +37,9 @@ final class AppModel {
         talkKey = initialKey
         clipsFolder = URL.applicationSupportDirectory.appending(path: "Tape/Clips", directoryHint: .isDirectory)
         let focus = AXFocusReader()
+        let recorder = ScreenCaptureRecorder()
         session = RecordingSession(
-            recorder: ScreenCaptureRecorder(),
+            recorder: recorder,
             focus: focus,
             delivery: PasteboardDelivery(focus: focus),
             store: LocalClipStore(root: clipsFolder)
@@ -50,6 +51,11 @@ final class AppModel {
 
         session.onStatus = { [weak self] in self?.statusChanged($0) }
         tap.onAction = { continuation.yield($0) }
+        let tap = tap
+        recorder.onUnexpectedStop = { _ in
+            tap.recordingEndedExternally()
+            continuation.yield(.cancelRecording)
+        }
     }
 
     var isRecording: Bool {
