@@ -134,6 +134,12 @@ public struct TalkGesture: Sendable {
         }
     }
 
+    public mutating func captureFailed() -> [Action] {
+        let wasRecording = isRecording
+        recordingEndedExternally()
+        return wasRecording ? [.cancelRecording] : []
+    }
+
     public mutating func interrupt() -> [Action] {
         let wasRecording = isRecording
         phase = .idle

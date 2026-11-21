@@ -118,4 +118,22 @@ struct TalkGestureTests {
         let flags = ModifierKey.leftControl.deviceMask | ModifierFlags.control
         #expect(ModifierKey.leftControl.removed(from: flags) == 0)
     }
+
+    @Test func captureFailureDuringHoldCancelsOnceAndWaitsForRelease() {
+        var gesture = TalkGesture()
+        _ = gesture.handle(.talkDown(at: 0, othersHeld: false))
+        #expect(gesture.captureFailed() == [.cancelRecording])
+        #expect(gesture.phase == .awaitingTalkUp)
+        #expect(gesture.captureFailed().isEmpty)
+        #expect(gesture.handle(.talkUp(at: 1)) == .init(.swallow))
+    }
+
+    @Test func captureFailureDuringHandsFreeCancelsOnce() {
+        var gesture = TalkGesture()
+        _ = gesture.handle(.talkDown(at: 0, othersHeld: false))
+        _ = gesture.handle(.talkUp(at: 0.1))
+        #expect(gesture.captureFailed() == [.cancelRecording])
+        #expect(gesture.phase == .idle)
+        #expect(gesture.captureFailed().isEmpty)
+    }
 }

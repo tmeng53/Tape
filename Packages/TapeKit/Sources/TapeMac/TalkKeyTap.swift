@@ -75,6 +75,10 @@ public final class TalkKeyTap {
         gesture.recordingEndedExternally()
     }
 
+    public func captureFailed() {
+        gesture.captureFailed().forEach(onAction)
+    }
+
     private func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }

@@ -130,6 +130,22 @@ struct RecordingSessionTests {
         #expect(try store.manifest(for: id).delivery == .kept)
     }
 
+    @Test func captureFailureCancelKeepsClipAndRepeatIsHarmless() async throws {
+        let (session, store) = makeSession()
+        recorder.failStop = true
+        focus.target = claude
+        session.start()
+        await session.perform(.cancelRecording)
+        await session.perform(.cancelRecording)
+
+        #expect(!session.isActive)
+        #expect(delivery.pasted.isEmpty && delivery.copied.isEmpty)
+        if case .failed = session.status {} else { Issue.record("expected failure, got \(session.status)") }
+        let url = try #require(recorder.started)
+        let id = try #require(UUID(uuidString: url.deletingLastPathComponent().lastPathComponent))
+        #expect(try store.manifest(for: id).delivery == .kept)
+    }
+
     @Test func discardDeletesClip() async throws {
         let (session, _) = makeSession()
         session.start()

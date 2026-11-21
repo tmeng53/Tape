@@ -52,10 +52,7 @@ final class AppModel {
         session.onStatus = { [weak self] in self?.statusChanged($0) }
         tap.onAction = { continuation.yield($0) }
         let tap = tap
-        recorder.onUnexpectedStop = { _ in
-            tap.recordingEndedExternally()
-            continuation.yield(.cancelRecording)
-        }
+        recorder.onUnexpectedStop = { _ in tap.captureFailed() }
     }
 
     var isRecording: Bool {
